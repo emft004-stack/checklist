@@ -53,11 +53,12 @@
     box-shadow: 0 -2px 8px rgba(0,0,0,.1);
   }
   .acoes button {
-    flex: 1; padding: 14px; font-size: 15px; border: none;
+    flex: 1; padding: 14px 8px; font-size: 15px; border: none;
     border-radius: 10px; font-weight: 700; color: #fff;
   }
   .btn-salvar { background: #1565c0; }
   .btn-pdf    { background: #c62828; }
+  .btn-share  { background: #25D366; }
   .status { text-align: center; font-size: 13px; color: #555; margin-top: 8px; }
   .gps-info {
     font-size: 12px; color: #666; margin-top: 6px;
@@ -88,10 +89,11 @@
 
 <div class="acoes">
   <button class="btn-salvar" onclick="salvar()">💾 Salvar</button>
-  <button class="btn-pdf" onclick="gerarPDF()">📄 PDF</button>
+  <button class="btn-pdf" onclick="baixarPDF()">📄 PDF</button>
+  <button class="btn-share" onclick="compartilharPDF()">📤 Enviar</button>
 </div>
 
-<!-- Bibliotecas para PDF (jsPDF) -->
+<!-- Biblioteca jsPDF -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <script>
@@ -138,7 +140,6 @@ function atualizarInfoGPS() {
   document.getElementById('gps-info').textContent = '📡 ' + gpsAtual.texto;
 }
 atualizarGPS();
-// atualiza a cada 30s
 setInterval(atualizarGPS, 30000);
 
 // ---------- Monta os itens ----------
@@ -180,11 +181,9 @@ function addFoto(i, input) {
 
   const reader = new FileReader();
   reader.onload = e => {
-    // cria a imagem para desenhar no canvas
     const img = new Image();
     img.onload = () => {
       const carimbada = carimbarFoto(img);
-      // comprime para não estourar memória
       comprimir(carimbada, 1000, dataURL => {
         estado[i].fotos.push({
           src: dataURL,
@@ -197,10 +196,9 @@ function addFoto(i, input) {
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
-  input.value = ''; // permite tirar outra foto na sequência
+  input.value = '';
 }
 
-// desenha data/hora + GPS na imagem
 function carimbarFoto(img) {
   const canvas = document.createElement('canvas');
   canvas.width = img.width;
@@ -215,7 +213,6 @@ function carimbarFoto(img) {
   const fontSize = Math.max(16, Math.round(canvas.width / 40));
   ctx.font = `bold ${fontSize}px sans-serif`;
 
-  // caixa preta semitransparente atrás do texto
   const padding = 10;
   const alturaLinha = fontSize + 6;
   const larguraTexto = Math.max(
@@ -226,7 +223,6 @@ function carimbarFoto(img) {
   ctx.fillRect(0, canvas.height - (alturaLinha * 2 + padding * 2),
                larguraTexto + padding * 2, alturaLinha * 2 + padding * 2);
 
-  // texto branco
   ctx.fillStyle = '#fff';
   ctx.fillText(linha1, padding, canvas.height - alturaLinha - padding / 2);
   ctx.fillText(linha2, padding, canvas.height - padding / 2);
@@ -294,7 +290,7 @@ function salvar() {
   a.click();
 }
 
-// ---------- PDF ----------
+// ---------- Geração do PDF (retorna o doc, não salva) ----------
 function gerarPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
@@ -321,7 +317,6 @@ function gerarPDF() {
   doc.text(`Data: ${data}`, 14, y); y += 6;
   doc.text(`GPS: ${gpsAtual.texto}`, 14, y); y += 8;
 
-  // legenda de status
   doc.setFontSize(10);
   doc.setTextColor(120, 120, 120);
   doc.text('OK = Aprovado   |   NOK = Reprovado   |   N/A = Não se aplica', 14, y);
@@ -332,7 +327,7 @@ function gerarPDF() {
   doc.setFontSize(12);
   ITENS.forEach((nome, i) => {
     const st = estado[i].status;
-    const stTxt = st === 'ok' ? 'OK'  : st === 'nok' ? 'NOK' : st === 'na' ? 'N/A' : '—';
+    const stTxt = st === 'ok' ? 'OK' : st === 'nok' ? 'NOK' : st === 'na' ? 'N/A' : '—';
     const cor = st === 'ok' ? [46,125,50] : st === 'nok' ? [198,40,40] : [120,120,120];
 
     if (y > 260) { doc.addPage(); y = 20; }
@@ -347,7 +342,6 @@ function gerarPDF() {
     doc.setFont(undefined, 'normal');
     y += 7;
 
-    // fotos do item
     const fotos = estado[i].fotos;
     if (fotos.length) {
       const largura = 42, altura = 42, gap = 4;
@@ -357,12 +351,11 @@ function gerarPDF() {
         if (x + largura > 196) { x = 14; y += altura + 4; }
         try {
           doc.addImage(f.src, 'JPEG', x, y, largura, altura);
-          // legenda data/gps abaixo
           doc.setFontSize(6);
           doc.setTextColor(90,90,90);
           doc.text(f.data, x, y + altura + 2);
           x += largura + gap;
-        } catch (e) { /* ignora erro de imagem */ }
+        } catch (e) {}
       });
       y += altura + 8;
     }
@@ -387,7 +380,37 @@ function gerarPDF() {
     doc.text(`Página ${p} de ${paginas}`, 105, 292, { align: 'center' });
   }
 
+  return doc;
+}
+
+// ---------- Baixar PDF ----------
+function baixarPDF() {
+  const doc = gerarPDF();
+  const placa = document.getElementById('placa').value || 'veiculo';
   doc.save(`checklist_${placa}_${Date.now()}.pdf`);
+}
+
+// ---------- Compartilhar PDF (WhatsApp etc.) ----------
+async function compartilharPDF() {
+  const doc = gerarPDF();
+  const placa = document.getElementById('placa').value || 'veiculo';
+  const pdfBlob = doc.output('blob');
+  const file = new File([pdfBlob], `checklist_${placa}.pdf`, { type: 'application/pdf' });
+
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({
+        files: [file],
+        title: `Checklist Veicular - ${placa}`,
+        text: `Checklist do veículo ${placa}`
+      });
+    } catch (err) {
+      console.log('Compartilhamento cancelado', err);
+    }
+  } else {
+    alert('Seu navegador não suporta compartilhamento direto. O PDF será baixado — anexe-o manualmente no WhatsApp.');
+    doc.save(`checklist_${placa}_${Date.now()}.pdf`);
+  }
 }
 </script>
 </body>
