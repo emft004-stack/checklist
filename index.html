@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Checklist Veicular</title>
+<title>CHECKLIST - ENTREGA DE VEICULO</title>
 <style>
   * { box-sizing: border-box; }
   body {
@@ -68,13 +68,15 @@
 </head>
 <body>
 
-<h1>🚗 Checklist Veicular</h1>
+<h1>🚗 CHECKLIST - ENTREGA DE VEICULO</h1>
 
 <div class="card">
   <label>Placa</label>
   <input type="text" id="placa" placeholder="ABC1D23">
   <label>Motorista</label>
   <input type="text" id="motorista" placeholder="Nome">
+  <label>KM / Hodômetro</label>
+  <input type="text" id="km" inputmode="numeric" placeholder="Ex.: 125430">
   <label>Data</label>
   <input type="text" id="data" readonly>
   <div class="gps-info" id="gps-info">📡 Buscando localização...</div>
@@ -98,16 +100,23 @@
 
 <script>
 const ITENS = [
-  "Pneus (estado e pressão)",
-  "Óleo do motor",
-  "Água do radiador",
-  "Freios",
+  "Capô e para-choque dianteiro",
+  "Para-choque traseiro",
+  "Portas e laterais",
+  "Teto",
+  "Retrovisores",
+  "Vidros e para-brisa",
   "Faróis e lanternas",
-  "Limpador de para-brisa",
-  "Documentos (CRLV/CNH)",
-  "Cintos de segurança",
-  "Estepe e macaco",
-  "Nível de combustível"
+  "Pneus e desgaste",
+  "Rodas e calotas",
+  "Estepe",
+  "Macaco e chave de roda",
+  "Placas e identificação",
+  "Bancos e revestimentos",
+  "Painel e luzes de advertência",
+  "Central multimídia e acessórios",
+  "Chaves",
+  "Triângulo, chave de roda e macaco"
 ];
 
 let estado = {};
@@ -263,6 +272,7 @@ function salvar() {
   const registro = {
     placa: document.getElementById('placa').value,
     motorista: document.getElementById('motorista').value,
+    km: document.getElementById('km').value,
     data: document.getElementById('data').value,
     gps: gpsAtual,
     obs: document.getElementById('obs').value,
@@ -297,6 +307,7 @@ function gerarPDF() {
 
   const placa = document.getElementById('placa').value || '—';
   const motorista = document.getElementById('motorista').value || '—';
+  const km = document.getElementById('km').value || '—';
   const data = document.getElementById('data').value;
   const obs = document.getElementById('obs').value || '—';
 
@@ -307,13 +318,15 @@ function gerarPDF() {
   doc.rect(0, 0, 210, 22, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(16);
-  doc.text('Checklist Veicular', 14, 14);
+  doc.setFontSize(13);
+  doc.text('CHECKLIST - ENTREGA DE VEICULO', 14, 14);
 
   doc.setTextColor(0, 0, 0);
   y = 32;
   doc.setFontSize(11);
   doc.text(`Placa: ${placa}`, 14, y); y += 6;
   doc.text(`Motorista: ${motorista}`, 14, y); y += 6;
+  doc.text(`KM / Hodômetro: ${km}`, 14, y); y += 6;
   doc.text(`Data: ${data}`, 14, y); y += 6;
   doc.text(`GPS: ${gpsAtual.texto}`, 14, y); y += 8;
 
@@ -401,8 +414,8 @@ async function compartilharPDF() {
     try {
       await navigator.share({
         files: [file],
-        title: `Checklist Veicular - ${placa}`,
-        text: `Checklist do veículo ${placa}`
+        title: `CHECKLIST - ENTREGA DE VEICULO - ${placa}`,
+        text: `CHECKLIST - ENTREGA DE VEICULO do veículo ${placa}`
       });
     } catch (err) {
       console.log('Compartilhamento cancelado', err);
