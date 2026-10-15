@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Checklist Veicular</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Roboto, sans-serif;
+    margin: 0; padding: 16px; padding-bottom: 100px;
+    background: #f2f4f7; color: #1a1a1a;
+  }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  .card {
+    background: #fff; border-radius: 12px;
+    padding: 14px; margin-bottom: 14px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.08);
+  }
+  label { display: block; font-weight: 600; margin: 8px 0 4px; font-size: 14px; }
+  input[type=text], textarea, select {
+    width: 100%; padding: 10px; border: 1px solid #ccd;
+    border-radius: 8px; font-size: 16px;
+  }
+  .item {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0; border-bottom: 1px solid #eee;
+  }
+  .item span { flex: 1; font-size: 15px; }
+  .btns { display: flex; gap: 6px; }
+  .btns button {
+    border: none; padding: 8px 10px; border-radius: 8px;
+    font-size: 13px; cursor: pointer; color: #fff;
+  }
+  .ok   { background: #2e7d32; }
+  .nok  { background: #c62828; }
+  .na   { background: #757575; }
+  .btns button.ativo { outline: 3px solid #000; }
+  .fotos { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .fotos img {
+    width: 90px; height: 90px; object-fit: cover;
+    border-radius: 8px; border: 1px solid #ccc; cursor: pointer;
+  }
+  .btn-add {
+    display: inline-block; background: #1565c0; color: #fff;
+    padding: 10px 14px; border-radius: 8px; font-size: 14px;
+    cursor: pointer; margin-top: 8px;
+  }
+  .btn-add input { display: none; }
+  .acoes {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #fff; padding: 10px; display: flex; gap: 8px;
+    box-shadow: 0 -2px 8px rgba(0,0,0,.1);
+  }
+  .acoes button {
+    flex: 1; padding: 14px; font-size: 15px; border: none;
+    border-radius: 10px; font-weight: 700; color: #fff;
+  }
+  .btn-salvar { background: #1565c0; }
+  .btn-pdf    { background: #c62828; }
+  .status { text-align: center; font-size: 13px; color: #555; margin-top: 8px; }
+  .gps-info {
+    font-size: 12px; color: #666; margin-top: 6px;
+    background: #f8f8f8; padding: 6px 8px; border-radius: 6px;
+  }
+</style>
+</head>
+<body>
+
+<h1>🚗 Checklist Veicular</h1>
+
+<div class="card">
+  <label>Placa</label>
+  <input type="text" id="placa" placeholder="ABC1D23">
+  <label>Motorista</label>
+  <input type="text" id="motorista" placeholder="Nome">
+  <label>Data</label>
+  <input type="text" id="data" readonly>
+  <div class="gps-info" id="gps-info">📡 Buscando localização...</div>
+</div>
+
+<div class="card" id="listaItens"></div>
+
+<div class="card">
+  <label>Observações</label>
+  <textarea id="obs" rows="3" placeholder="Anotações gerais..."></textarea>
+</div>
+
+<div class="acoes">
+  <button class="btn-salvar" onclick="salvar()">💾 Salvar</button>
+  <button class="btn-pdf" onclick="gerarPDF()">📄 PDF</button>
+</div>
+
+<!-- Bibliotecas para PDF (jsPDF) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+const ITENS = [
+  "Pneus (estado e pressão)",
+  "Óleo do motor",
+  "Água do radiador",
+  "Freios",
+  "Faróis e lanternas",
+  "Limpador de para-brisa",
+  "Documentos (CRLV/CNH)",
+  "Cintos de segurança",
+  "Estepe e macaco",
+  "Nível de combustível"
+];
+
+let estado = {};
+let gpsAtual = { lat: null, lng: null, texto: 'Localização não obtida' };
+
+document.getElementById('data').value = new Date().toLocaleString('pt-BR');
+
+// ---------- GPS ----------
+function atualizarGPS() {
+  if (!navigator.geolocation) {
+    gpsAtual.texto = 'GPS não suportado neste navegador';
+    atualizarInfoGPS();
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      gpsAtual.lat = pos.coords.latitude.toFixed(6);
+      gpsAtual.lng = pos.coords.longitude.toFixed(6);
+      gpsAtual.texto = `${gpsAtual.lat}, ${gpsAtual.lng}`;
+      atualizarInfoGPS();
+    },
+    err => {
+      gpsAtual.texto = 'Permissão de GPS negada';
+      atualizarInfoGPS();
+    },
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
+}
+function atualizarInfoGPS() {
+  document.getElementById('gps-info').textContent = '📡 ' + gpsAtual.texto;
+}
+atualizarGPS();
+// atualiza a cada 30s
+setInterval(atualizarGPS, 30000);
+
+// ---------- Monta os itens ----------
+const lista = document.getElementById('listaItens');
+ITENS.forEach((nome, i) => {
+  estado[i] = { status: null, fotos: [] };
+  const div = document.createElement('div');
+  div.innerHTML = `
+    <div class="item">
+      <span>${nome}</span>
+      <div class="btns">
+        <button class="ok"  onclick="marcar(${i},'ok',this)">OK</button>
+        <button class="nok" onclick="marcar(${i},'nok',this)">NOK</button>
+        <button class="na"  onclick="marcar(${i},'na',this)">N/A</button>
+      </div>
+    </div>
+    <div class="fotos" id="fotos-${i}"></div>
+    <label class="btn-add">
+      📷 Adicionar foto
+      <input type="file" accept="image/*" capture="environment"
+             onchange="addFoto(${i}, this)">
+    </label>
+    <hr style="border:none;border-top:1px dashed #ddd;margin:10px 0">
+  `;
+  lista.appendChild(div);
+});
+
+function marcar(i, status, btn) {
+  estado[i].status = status;
+  const parent = btn.parentElement;
+  [...parent.children].forEach(b => b.classList.remove('ativo'));
+  btn.classList.add('ativo');
+}
+
+// ---------- Fotos ----------
+function addFoto(i, input) {
+  const file = input.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = e => {
+    // cria a imagem para desenhar no canvas
+    const img = new Image();
+    img.onload = () => {
+      const carimbada = carimbarFoto(img);
+      // comprime para não estourar memória
+      comprimir(carimbada, 1000, dataURL => {
+        estado[i].fotos.push({
+          src: dataURL,
+          data: new Date().toLocaleString('pt-BR'),
+          gps: gpsAtual.texto
+        });
+        renderFotos(i);
+      });
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  input.value = ''; // permite tirar outra foto na sequência
+}
+
+// desenha data/hora + GPS na imagem
+function carimbarFoto(img) {
+  const canvas = document.createElement('canvas');
+  canvas.width = img.width;
+  canvas.height = img.height;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+
+  const dataHora = new Date().toLocaleString('pt-BR');
+  const linha1 = '📅 ' + dataHora;
+  const linha2 = '📍 ' + gpsAtual.texto;
+
+  const fontSize = Math.max(16, Math.round(canvas.width / 40));
+  ctx.font = `bold ${fontSize}px sans-serif`;
+
+  // caixa preta semitransparente atrás do texto
+  const padding = 10;
+  const alturaLinha = fontSize + 6;
+  const larguraTexto = Math.max(
+    ctx.measureText(linha1).width,
+    ctx.measureText(linha2).width
+  );
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(0, canvas.height - (alturaLinha * 2 + padding * 2),
+               larguraTexto + padding * 2, alturaLinha * 2 + padding * 2);
+
+  // texto branco
+  ctx.fillStyle = '#fff';
+  ctx.fillText(linha1, padding, canvas.height - alturaLinha - padding / 2);
+  ctx.fillText(linha2, padding, canvas.height - padding / 2);
+
+  return canvas;
+}
+
+function renderFotos(i) {
+  const box = document.getElementById(`fotos-${i}`);
+  box.innerHTML = '';
+  estado[i].fotos.forEach((f, idx) => {
+    const img = document.createElement('img');
+    img.src = f.src;
+    img.title = `${f.data} — ${f.gps}`;
+    img.onclick = () => {
+      if (confirm('Remover esta foto?')) {
+        estado[i].fotos.splice(idx, 1);
+        renderFotos(i);
+      }
+    };
+    box.appendChild(img);
+  });
+}
+
+function comprimir(canvasOuImg, maxLado, cb) {
+  let w = canvasOuImg.width, h = canvasOuImg.height;
+  if (w > h && w > maxLado) { h *= maxLado / w; w = maxLado; }
+  else if (h > maxLado)      { w *= maxLado / h; h = maxLado; }
+
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  c.getContext('2d').drawImage(canvasOuImg, 0, 0, w, h);
+  cb(c.toDataURL('image/jpeg', 0.75));
+}
+
+// ---------- Salvar ----------
+function salvar() {
+  const registro = {
+    placa: document.getElementById('placa').value,
+    motorista: document.getElementById('motorista').value,
+    data: document.getElementById('data').value,
+    gps: gpsAtual,
+    obs: document.getElementById('obs').value,
+    itens: ITENS.map((nome, i) => ({
+      nome,
+      status: estado[i].status,
+      fotos: estado[i].fotos
+    }))
+  };
+  if (!registro.placa) { alert('Preencha a placa!'); return; }
+
+  const todos = JSON.parse(localStorage.getItem('checklists') || '[]');
+  todos.push(registro);
+  try {
+    localStorage.setItem('checklists', JSON.stringify(todos));
+    alert('✅ Salvo localmente!');
+  } catch (e) {
+    alert('Armazenamento cheio! Gere o PDF e apague os antigos.');
+  }
+
+  const blob = new Blob([JSON.stringify(registro, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `checklist_${registro.placa}_${Date.now()}.json`;
+  a.click();
+}
+
+// ---------- PDF ----------
+function gerarPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+
+  const placa = document.getElementById('placa').value || '—';
+  const motorista = document.getElementById('motorista').value || '—';
+  const data = document.getElementById('data').value;
+  const obs = document.getElementById('obs').value || '—';
+
+  let y = 15;
+
+  // cabeçalho
+  doc.setFillColor(21, 101, 192);
+  doc.rect(0, 0, 210, 22, 'F');
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(16);
+  doc.text('Checklist Veicular', 14, 14);
+
+  doc.setTextColor(0, 0, 0);
+  y = 32;
+  doc.setFontSize(11);
+  doc.text(`Placa: ${placa}`, 14, y); y += 6;
+  doc.text(`Motorista: ${motorista}`, 14, y); y += 6;
+  doc.text(`Data: ${data}`, 14, y); y += 6;
+  doc.text(`GPS: ${gpsAtual.texto}`, 14, y); y += 8;
+
+  // legenda de status
+  doc.setFontSize(10);
+  doc.setTextColor(120, 120, 120);
+  doc.text('OK = Aprovado   |   NOK = Reprovado   |   N/A = Não se aplica', 14, y);
+  y += 8;
+  doc.setTextColor(0, 0, 0);
+
+  // itens
+  doc.setFontSize(12);
+  ITENS.forEach((nome, i) => {
+    const st = estado[i].status;
+    const stTxt = st === 'ok' ? 'OK'  : st === 'nok' ? 'NOK' : st === 'na' ? 'N/A' : '—';
+    const cor = st === 'ok' ? [46,125,50] : st === 'nok' ? [198,40,40] : [120,120,120];
+
+    if (y > 260) { doc.addPage(); y = 20; }
+
+    doc.setTextColor(0,0,0);
+    doc.setFontSize(11);
+    doc.text(`• ${nome}`, 14, y);
+
+    doc.setTextColor(...cor);
+    doc.setFont(undefined, 'bold');
+    doc.text(stTxt, 180, y);
+    doc.setFont(undefined, 'normal');
+    y += 7;
+
+    // fotos do item
+    const fotos = estado[i].fotos;
+    if (fotos.length) {
+      const largura = 42, altura = 42, gap = 4;
+      let x = 14;
+      fotos.forEach(f => {
+        if (y + altura > 280) { doc.addPage(); y = 20; x = 14; }
+        if (x + largura > 196) { x = 14; y += altura + 4; }
+        try {
+          doc.addImage(f.src, 'JPEG', x, y, largura, altura);
+          // legenda data/gps abaixo
+          doc.setFontSize(6);
+          doc.setTextColor(90,90,90);
+          doc.text(f.data, x, y + altura + 2);
+          x += largura + gap;
+        } catch (e) { /* ignora erro de imagem */ }
+      });
+      y += altura + 8;
+    }
+  });
+
+  // observações
+  if (y > 250) { doc.addPage(); y = 20; }
+  y += 4;
+  doc.setFontSize(12);
+  doc.setTextColor(0,0,0);
+  doc.text('Observações:', 14, y); y += 6;
+  doc.setFontSize(10);
+  const linhas = doc.splitTextToSize(obs, 180);
+  doc.text(linhas, 14, y);
+
+  // rodapé
+  const paginas = doc.getNumberOfPages();
+  for (let p = 1; p <= paginas; p++) {
+    doc.setPage(p);
+    doc.setFontSize(8);
+    doc.setTextColor(150,150,150);
+    doc.text(`Página ${p} de ${paginas}`, 105, 292, { align: 'center' });
+  }
+
+  doc.save(`checklist_${placa}_${Date.now()}.pdf`);
+}
+</script>
+</body>
+</html>
